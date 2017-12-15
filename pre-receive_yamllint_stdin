@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+set -e
+
+ENV_PYTHON='/usr/bin/python'
+
+if ((
+       (ENV_PYTHON_RETV != 0) && (YAMLLINT != 0)
+)); then
+    echo '`python` or `yamllint` not found.'
+    exit 1
+fi
+
+oldrev=$1
+newrev=$2
+refname=$3
+
+while read oldrev newrev refname; do
+    # Get a list of all objects in the new revision
+    objects=`git ls-tree --full-name -r ${newrev}`
+	
+    # Get the file names, without directory, of the files that have been modified
+    # between the new revision and the old revision
+	git diff --name-only $oldrev $newrev | while read file; do
+		# Search for the file name in the list of all objects
+		object=`echo -e "${objects}" | egrep "(\s)${file}\$" | egrep '\.yml$' | awk '{ print $3 }'`
+		# If it's not present, then continue to the the next itteration
+		if [ -z ${object} ]; 
+		then 
+			continue; 
+		fi
+		
+		# Get file in commit and point /dev/stdin as input file 
+		# and put the files through pipe for syntax validation
+		echo $file
+		git show $newrev:$file | /usr/bin/yamllint -d "{extends: relaxed, rules: {line-length: disable, comments: disable, trailing-spaces: disable, empty-lines: disable}}" /dev/stdin || exit 1
+	done
+done
